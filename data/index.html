@@ -1,0 +1,272 @@
+<!DOCTYPE HTML><html>
+<head>
+  <title>DHDP: Dust and Heat detector and purifier</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+  html {
+    font-family: Arial, Helvetica, sans-serif;
+    text-align: center;
+  }
+  h1 {
+    font-size: 1.8rem;
+    color: white;
+  }
+  h2{
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #143642;
+  }
+  .topnav {
+    overflow: hidden;
+    background-color: #143642;
+  }
+  body {
+    margin: 0;
+    background-color: rgb(180, 243, 235);
+  }
+  .content {
+    padding: 30px;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+  .card {
+    background-color: #F8F7F9;;
+    box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5);
+    padding-top:10px;
+    padding-bottom:20px;
+  }
+  .button {
+    padding: 15px 50px;
+    font-size: 24px;
+    text-align: center;
+    outline: none;
+    color: #fff;
+    background-color: #0f8b8d;
+    border: none;
+    border-radius: 5px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+   }
+   /*.button:hover {background-color: #0f8b8d}*/
+   .button:active {
+     background-color: #0f8b8d;
+     box-shadow: 2 2px #CDCDCD;
+     transform: translateY(2px);
+   }
+   .state {
+     font-size: 1.5rem;
+     color:#8c8c8c;
+     font-weight: bold;
+   }
+   .item-title {
+    font-size: 2;
+    color: #000000;
+    font-weight: bold;
+   }
+   .box-item {
+    background-color: #5fdee067;
+    border-style: solid;
+    border-color: #0800ff;
+    border-width: 5px;
+   }
+   .codebox {
+    background-color: aliceblue;
+    border-style: solid;
+    border-color: #000000;
+    border-width: 1px;
+    border-radius: 5px;
+    margin: 10px;
+   }
+  </style>
+<title>ESP Web Server</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+</head>
+<body>
+  <div class="topnav">
+    <h1>DHDP: Dust and Heat Detector and Purifier Web Control Panel</h1>
+  </div>
+  <div class="content">
+    <div id="dust-item" class="box-item">
+      <h3 class="item-title">Dust:</h3>
+      <canvas id="dust-gauge"></canvas>
+      <h4 id="dust-text"></h4>
+    </div>
+    <div id="temp-item" class="box-item">
+      <h3 class="item-title">Temperature:</h3>
+      <canvas id="temp-gauge"></canvas>
+      <h4 id="temp-text"></h4>
+    </div>
+    <div id="moist-item" class="box-item">
+      <h3 class="item-title">Moisture:</h3>
+      <canvas id="moist-gauge"></canvas>
+      <h4 id="moist-text"></h4>
+    </div>
+    <div id="motion-item" class="box-item">
+      <h3 class="item-title">Motion:</h3>
+      <h4 id="motion-text"></h4>
+    </div>
+    <div id="lua-textbox" class="box-item">
+      <h3 class="item-title">Lua Code Editbox:</h3>
+      <button id="lua-download">Click to download uploaded code!</button>
+      <textarea id="lua-codebox" class="codebox" contenteditable="true" cols="50" rows="5">--Type Lua Code here..</textarea>
+      <button id="lua-upload">Click to upload code!</button>
+    </div>
+    <div id="sysmsg-box" class="box-item">
+      <h3 class="item-title">System Messages (From NodeMCU)</h3>
+      <h5 id="sysmsg-textbox" class="codebox">System Messages will show up in JSON here.</h5>
+    </div>
+  </div>
+
+  <script src="./jquery.js"></script>
+  <script src="./gauge.js"></script>
+  <script>
+    var opts = {
+      angle: 0.15, /// The span of the gauge arc
+      lineWidth: 0.44, // The line thickness
+      pointer: {
+        length: 0.9, // Relative to gauge radius
+        strokeWidth: 0.035 // The thickness
+      },
+      colorStart: '#6FADCF',   // Colors
+      colorStop: '#8FC0DA',    // just experiment with them
+      strokeColor: '#E0E0E0'   // to see which ones work best for you
+    };
+
+    var dust_gauge_elem = document.getElementById("dust-gauge");
+    var temp_gauge_elem = document.getElementById("temp-gauge");
+    var moist_gauge_elem = document.getElementById("moist-gauge");
+
+    var dust_gauge_text = document.getElementById("dust-text");
+    var temp_gauge_text = document.getElementById("temp-text");
+    var moist_gauge_text = document.getElementById("moist-text");
+    var motion_gauge_text = document.getElementById("motion-text");
+
+    var dust_gauge = new Gauge(dust_gauge_elem).setOptions(opts);
+    var temp_gauge = new Gauge(temp_gauge_elem).setOptions(opts);
+    var moist_gauge = new Gauge(moist_gauge_elem).setOptions(opts);
+
+    var lua_upload = document.getElementById("lua-upload");
+    var lua_download = document.getElementById("lua-download");
+    var lua_box = document.getElementById("lua-codebox");
+
+    var sysmsg_textbox = document.getElementById("sysmsg-textbox");
+
+    var host = `http://${window.location.hostname}`
+    var gateway = `ws://${window.location.hostname}/ws`;
+    var websocket;
+    window.addEventListener('load', onLoad);
+    function initWebSocket() {
+      console.log('Trying to open a WebSocket connection...');
+      websocket = new WebSocket(gateway);
+      websocket.onopen    = onOpen;
+      websocket.onclose   = onClose;
+      websocket.onmessage = onMessage; // <-- add this line
+    }
+    function onOpen(event) {
+      console.log('Connection opened');
+    }
+    function onClose(event) {
+      console.log('Connection closed');
+      setTimeout(initWebSocket, 2000);
+    }
+
+    var dust_data = 0;
+    var temp_data = 0;
+    var moist_data = 0;
+    var motion_data = false;
+
+    function updateDataGauges() {
+      dust_gauge.set(dust_data);
+      temp_gauge.set(temp_data);
+      moist_gauge.set(moist_data);
+
+      dust_gauge_text.textContent = "Value: " + dust_data + "/1.00";
+      temp_gauge_text.textContent = "Value: " + temp_data + "/60 C";
+      moist_gauge_text.textContent = "Value: " + moist_data + "/100";
+      motion_gauge_text.textContent = "Value: " + motion_data;
+    }
+
+    function downloadGaugeData() {
+      $.get(host + "/data", function(data, status) {
+        //Parse the JSON
+        try {
+          //data = '{"dust": 1,"moist": 53,"temp": 32,"motion": false}';
+          gotData = JSON.parse(data);
+        } catch(err) {
+          console.log("Error when parsing JSON: " + err.message);
+          return;
+        }
+        dust_data = gotData.dust;
+        temp_data = gotData.temp;
+        moist_data = gotData.moist;
+        motion_data  = gotData.motion;
+        //Update the gauges and client data
+        updateDataGauges();
+      });
+    }
+
+    function updateMessagesData() {
+      $.get(host + "/sys_msgs", function(data, status) {
+        //For now make it directly show the returned JSON data.
+        sysmsg_textbox.textContent = data;
+      });
+    }
+
+    function onMessage(event) {
+      var msg = event.data;
+      switch(msg) {
+        case "update":
+          downloadGaugeData();
+          break;
+        case "sys_msg":
+          updateMessagesData();
+          break;
+      }
+    }
+    function onLoad(event) {
+      initWebSocket();
+      initGauges();
+    }
+    function initGauges() {
+      dust_gauge.maxValue = 1;
+      temp_gauge.maxValue = 60;
+      moist_gauge.maxValue = 100;
+      dust_gauge.minValue = 0;
+      temp_gauge.minValue = 0;
+      moist_gauge.minValue = 0;
+      downloadGaugeData();
+    }
+
+    function downloadLuaCode() {
+      $.get(host + "/code", function(data, status) {
+        //Update the textbox's code.
+        lua_box.value = data;
+      });
+    }
+
+    function uploadLuaCode() {
+      /*
+      $.post(host + "/code_post", lua_box.textContent, function(data, status) {
+        console.log("Lua Code uploaded!: " + data + " Status: " + status);
+      });
+      */
+      fetch(host + "/code_post", {
+        method: "POST",
+        body: lua_box.value
+      }).then((res) => console.log(res.body));
+    }
+
+    lua_download.onclick = downloadLuaCode;
+    lua_upload.onclick = uploadLuaCode;
+
+    initGauges();
+    updateDataGauges();
+  </script>
+</body>
+</html>
