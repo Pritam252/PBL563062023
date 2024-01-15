@@ -439,7 +439,7 @@ void setup()
 
     //SECTION WIFI READ
     //Determine whether to use SoftAP or Station
-    MAIN::useSoftAPMode = false;//digitalRead(D6);
+    MAIN::useSoftAPMode = false; //digitalRead(D6);
     //ENDSECTION
 
     //Make sure to tell arduino to keep motor off during bootup.
